@@ -48,7 +48,7 @@ or eax, 1
 mov cr0, eax
 
 jmp dword 0x8:protect   ; jmpi 0x08 => gdt+1, eip=protect, 0x8 is PROT_MODE_CSEG
-
+                        ; 0x8(0000000000001000后3位为TI,RPL)也就是指向gdt+1的段
 align 4    ; 4B align
 temp_gdt:
     seg_null

@@ -29,7 +29,7 @@ next:
     mov dh, 0   ; Heads
     mov cl, 2   ; Sector start number
     mov ah, 2   ; read function 
-    mov al, 3   ; read 3 sectors
+    mov al, 40  ; read 40 sectors
     mov dl, 80h ; 
     int 13h
 
@@ -39,7 +39,7 @@ next:
 
 ; data to print
 msg: db "oh~ hello labOS!", 10, 0
-len: equ 18
+len equ 18
 
 ; padding with 0 to 510B
 times 510-($-$$) db 0
