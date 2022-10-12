@@ -13,6 +13,7 @@ static uint8_t* screen_buf = (uint8_t*)0xb8000;
 static int cur_x, cur_y;
 
 /* 以下4个函数复制自 osdev */
+
 void enable_cursor(uint8_t cursor_start, uint8_t cursor_end)
 {
 	outb(0x3D4, 0x0A);
@@ -30,13 +31,13 @@ void disable_cursor()
 // It would be faster to instead only update it after printing an entire string.
 void update_cursor(int x, int y)
 {
-	uint16_t pos = x * VGA_WIDTH + y;
+    // 对应到显存的位置需要除以2
+	uint16_t pos = x * (VGA_WIDTH / 2) + y / 2;
 	outb(0x3D4, 0x0F);
 	outb(0x3D5, (uint8_t) (pos & 0xFF));
 	outb(0x3D4, 0x0E);
 	outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
 }
-
 //pos = y * VGA_WIDTH + x.
 //To obtain the coordinates, just calculate: y = pos / VGA_WIDTH; x = pos % VGA_WIDTH;.
 uint16_t get_cursor_position(void)
@@ -53,28 +54,46 @@ uint16_t get_cursor_position(void)
 
 // 初始化光标位置和显存
 void init_scr() {
-    cur_x = 0, cur_y = 0;
+    cur_x = 1, cur_y = 0;
     clsscr();
-    enable_cursor(0, 0);
+    // 参数意为让光标的显示范围为第x像素行到第y像素行，一行有16个像素，此为仅显示最后一行的像素点
+    enable_cursor(15, 16);
 }
 
 // 清空显存
 void clsscr() {
     for (int i = 0; i < VGA_HEIGHT * VGA_WIDTH; i += 2) {
-        screen_buf[i] = '\0';
-        screen_buf[i+1] = Light_Blue;
+        //screen_buf[i] = '\0';
+        screen_buf[i+1] = Black<<4 | Gray;
     }
 }
 
 // 移动到x行y列
 void moveto(int x, int y) {
     cur_y = ABS(y);
-    if (cur_y > VGA_WIDTH) { // 换行
+    if (cur_y >= VGA_WIDTH) { // 换行
         cur_y %= VGA_WIDTH;
         x++;
     }
-    cur_x = ABS(x) % VGA_HEIGHT;
+    if (ABS(x) == VGA_HEIGHT) { // 判断是否最后一行
+        cur_x = VGA_HEIGHT - 1;
+        screen_scroll_up(1);  // 其他内容向上滚动一行
+    } else {
+        cur_x = ABS(x);
+    }
     update_cursor(cur_x, cur_y);
+}
+
+void screen_scroll_up(int line) {
+    int src = line * VGA_WIDTH, dst = 0;
+    for (; src < VGA_HEIGHT * VGA_WIDTH; src++, dst++) {
+        screen_buf[dst] = screen_buf[src];
+    }
+    while (dst < VGA_HEIGHT * VGA_WIDTH) {
+        screen_buf[dst] = '\0';
+        screen_buf[dst+1] = Black;
+        dst += 2;
+    }
 }
 
 // 第一字节为ascii码 第二字节低4位前景色高3位背景色
@@ -115,8 +134,7 @@ void puts_color(uint8_t* s, enum Color fcolor, enum Color bcolor) {
     moveto(cur_x+1, 0);
 }
 
-
-// 将num转成base进制的字符串 应该只会用到2, 10, 16. 最大0xffffffff
+// 将num转成base进制的字符串然后输出 应该只会用到2, 10, 16. 最大0xffffffff
 void putint(unsigned int num, int base) {
     const char *tlb = "0123456789abcdef";
     char res[50];

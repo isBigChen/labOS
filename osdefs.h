@@ -1,7 +1,7 @@
 #ifndef _OSDEFS_H_
 #define _OSDEFS_H_
 
-#define OS_NAME "testos"
+#define OS_NAME "labOS"
 
 // 强制内联
 #define __always_inline inline __attribute__((always_inline))
@@ -72,7 +72,7 @@ struct segment_descriptor {
 };
 
 // 随便设的　暂时不考虑空间浪费的问题
-#define GDT_ADDR 0x1000
+#define GDT_ADDR 0x3000
 
 #define PIC0_ICW1 0x20
 #define PIC0_OCW2 0x20
@@ -87,7 +87,7 @@ struct segment_descriptor {
 #define PIC1_ICW3 0xa1
 #define PIC1_ICW4 0xa1
 
-#define IDT_ADDR 0x2000
+#define IDT_ADDR 0x4000
 
 // https://wiki.osdev.org/Interrupts_tutorial
 // ISR = Interrupt Service Routine
@@ -105,6 +105,11 @@ struct idt_entry_t {
 // Timer的端口　https://wiki.osdev.org/Programmable_Interval_Timer#I/O%20Ports
 #define PIT_CTRL 0x43
 #define PIT_CNT0 0x40
+
+// Keyboard端口
+#define PS2_DATA 0x60
+#define PS2_CMD  0x64
+#define PS2_STAT 0x64
 
 //目前只用了没有涉及特权转换的中断栈层次 
 // https://www.logix.cz/michal/doc/i386/chp09-06.htm#09-06-01-01

@@ -50,10 +50,12 @@ mov cr0, eax
 jmp dword 0x8:protect   ; jmpi 0x08 => gdt+1, eip=protect, 0x8 is PROT_MODE_CSEG
                         ; 0x8(0000000000001000后3位为TI,RPL)也就是指向gdt+1的段
 align 4    ; 4B align
+; GDT, 抄ucore
 temp_gdt:
     seg_null
     set_seg STA_X|STA_R, 0x0, 0xffffffff ; code segment
     set_seg STA_W, 0x0, 0xffffffff       ; data segment
+; GDTR的内容
 temp_gdtdesc:
     dw 0x17         ; three segments, 3x8-1 = 23 = 0x17 = sizeof(gdt)-1
     dd temp_gdt     ; gdt start address

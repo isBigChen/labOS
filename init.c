@@ -29,6 +29,7 @@ void init_gdt() { // 重新设置gdt表
     
     asm volatile("lgdt %0\n\t"
                  "jmp $0x08,$x\n\t" :: "m" (gdtr));
+    //$x是符号，下面内嵌汇编的x符号
     // 重新加载后要刷新段寄存器
     asm volatile("x: mov $0x10, %ax\n\t"
                  "mov %ax, %ds\n\t"
@@ -61,7 +62,9 @@ void init_timer() { // 抄书, 设置定时器PIT(Programmable Interval Timer)
     outb(PIC1_IMR, 0xff);
 }
 
+//// https://wiki.osdev.org/Interrupts_tutorial
 // 设置中断门描述符　https://www.logix.cz/michal/doc/i386/chp09-05.htm#09-05
+//isr is the interrupe function's address
 void set_intrdesc(struct idt_entry_t *id, void* isr, uint16_t cs, uint8_t attr) {
     id->isr_low = (uint32_t)isr & 0xffff;
     id->kernel_cs = cs;
