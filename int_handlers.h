@@ -3,6 +3,9 @@
 
 #include "osdefs.h"
 
+#define INT_TIMER    0x20
+#define INT_KEYBOARD 0x21
+
 __attribute__ ((interrupt))
 void divide_zero_fault_handler0(struct interrupt_frame *frame);
 
@@ -55,6 +58,10 @@ void interrupt_handler_default(struct interrupt_frame *frame);
 // 时钟中断
 __attribute__ ((interrupt))
 void interrupt_handler_0x20(struct interrupt_frame *frame);
+
+// 键盘中断
+__attribute__ ((interrupt))
+void interrupt_handler_0x21(struct interrupt_frame *frame);
 
 // 暂定是系统调用中断号
 __attribute__ ((interrupt))

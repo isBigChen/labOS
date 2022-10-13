@@ -1,18 +1,33 @@
 #include "osdefs.h"
 #include "asm.h"
 #include "screen.h"
+#include "picirq.h"
+#include "kbd.h"
 
 // https://gcc.gnu.org/onlinedocs/gcc-7.5.0/gcc/x86-Function-Attributes.html#x86-Function-Attributes
 __attribute__ ((interrupt))
 void interrupt_handler_0x20(struct interrupt_frame *frame) {
-    static int cnt = 1;
-    outb(0xA0,0x20);
-    /* Send EOI to master PIC */
-    outb(0x20,0x20);
+    pic_ack();
+    static int cnt = 1, outputs = 0;
     cnt++;
     if (cnt == 100) {
-        puts(OS_NAME);
+        printf("%d %s\n", outputs, OS_NAME);
         cnt = 1;
+        outputs++;
+    }
+}
+
+__attribute__ ((interrupt))
+void interrupt_handler_0x21(struct interrupt_frame *frame) {
+    pic_ack();
+
+    if ((inb(PS2_STAT) & 0x01) == 0) { // check 8042 output buffer status
+        return;
+    }
+    uint8_t c = inb(PS2_DATA);
+    if (c != 0xE0) {
+        printf("Key [%s] is %s, code %x\n",
+            test_keymap[c & ~0x80], (c & 0x80) == 0 ? "pressed" : "released", c);
     }
 }
 
@@ -23,11 +38,8 @@ void interrupt_handler_0x80(struct interrupt_frame *frame) {
 
 __attribute__ ((interrupt))
 void interrupt_handler_default(struct interrupt_frame *frame) {
-    /* IRQ # on slave PIC send EOI to slave */
-    outb(0xA0,0x20);
-    /* Send EOI to master PIC */
-    outb(0x20,0x20);
-    // puts("default handler");
+    pic_ack();
+    puts("default handler");
 }
 
 // 许多中断放到栈上的东西有差别　暂时不管

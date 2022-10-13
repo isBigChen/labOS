@@ -1,6 +1,6 @@
 OSIMG = labOS.img
 KERNEL = main.o
-LIBS = screen.o mem.o init.o int_handlers.o
+LIBS = screen.o mem.o init.o int_handlers.o picirq.o
 V = @
 OS_NAME = $(shell uname)
 
