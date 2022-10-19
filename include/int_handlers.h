@@ -1,7 +1,7 @@
 #ifndef _INT_HANDLERS_H_
 #define _INT_HANDLERS_H_
 
-#include "osdefs.h"
+#include <osdefs.h>
 
 #define INT_TIMER    0x20
 #define INT_KEYBOARD 0x21

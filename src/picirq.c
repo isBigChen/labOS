@@ -1,5 +1,4 @@
-#include "osdefs.h"
-#include "asm.h"
+#include <osdefs.h>
 
 static uint8_t pic0_mask = 0xfb, pic1_mask = 0xff;
 static uint8_t did_init = 0;

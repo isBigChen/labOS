@@ -1,7 +1,6 @@
-#include "osdefs.h"
-#include "asm.h"
-#include "screen.h"
-#include "stdarg.h"
+#include <osdefs.h>
+#include <screen.h>
+#include <stdarg.h>
 
 #define VGA_WIDTH  (80*2)
 #define VGA_HEIGHT 25
@@ -38,6 +37,7 @@ void update_cursor(int x, int y)
 	outb(0x3D4, 0x0E);
 	outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
 }
+
 //pos = y * VGA_WIDTH + x.
 //To obtain the coordinates, just calculate: y = pos / VGA_WIDTH; x = pos % VGA_WIDTH;.
 uint16_t get_cursor_position(void)
@@ -53,23 +53,23 @@ uint16_t get_cursor_position(void)
 /* 接下来应该会有非常多的bug */
 
 // 初始化光标位置和显存
-void init_scr() {
-    cur_x = 1, cur_y = 0;
-    clsscr();
+void kern_init_scr() {
+    cur_x = 0, cur_y = 0;
+    kern_clsscr();
     // 参数意为让光标的显示范围为第x像素行到第y像素行，一行有16个像素，此为仅显示最后一行的像素点
     enable_cursor(15, 16);
 }
 
 // 清空显存
-void clsscr() {
+void kern_clsscr() {
     for (int i = 0; i < VGA_HEIGHT * VGA_WIDTH; i += 2) {
         //screen_buf[i] = '\0';
-        screen_buf[i+1] = Black<<4 | Gray;
+        screen_buf[i+1] = Gray;
     }
 }
 
 // 移动到x行y列
-void moveto(int x, int y) {
+void kern_moveto(int x, int y) {
     cur_y = ABS(y);
     if (cur_y >= VGA_WIDTH) { // 换行
         cur_y %= VGA_WIDTH;
@@ -97,88 +97,88 @@ void screen_scroll_up(int line) {
 }
 
 // 第一字节为ascii码 第二字节低4位前景色高3位背景色
-void putchar_color(uint8_t c, enum Color fcolor, enum Color bcolor) {
+void kern_putchar_color(uint8_t c, enum Color fcolor, enum Color bcolor) {
     if (c == '\n') { // 换行
-        moveto(cur_x+1, 0);
+        kern_moveto(cur_x+1, 0);
         return;
     }
 
     int pos = cur_y+cur_x*VGA_WIDTH;
     screen_buf[pos] = c;
     screen_buf[pos+1] = bcolor<<4|fcolor;
-    moveto(cur_x, cur_y+2);
+    kern_moveto(cur_x, cur_y+2);
 }
 
-void putchar(uint8_t c) {
-    putchar_color(c, Gray, Black);
+void kern_putchar(uint8_t c) {
+    kern_putchar_color(c, Gray, Black);
 }
 
 // flag 控制是否换行
-void puts_nl(uint8_t* s, int flag) {
+void kern_puts_nl(uint8_t* s, int flag) {
     for (; *s; s++) {
-        putchar(*s);
+        kern_putchar(*s);
     }
     if (flag) {
-        moveto(cur_x+1, 0);
+        kern_moveto(cur_x+1, 0);
     }
 }
 
-void puts(uint8_t* s) {
-    puts_nl(s, TRUE);
+void kern_puts(uint8_t* s) {
+    kern_puts_nl(s, TRUE);
 }
 
-void puts_color(uint8_t* s, enum Color fcolor, enum Color bcolor) {
+void kern_puts_color(uint8_t* s, enum Color fcolor, enum Color bcolor) {
     for (; *s; s++) {
-        putchar_color(*s, fcolor, bcolor);
+        kern_putchar_color(*s, fcolor, bcolor);
     }
-    moveto(cur_x+1, 0);
+    kern_moveto(cur_x+1, 0);
 }
 
 // 将num转成base进制的字符串然后输出 应该只会用到2, 10, 16. 最大0xffffffff
-void putint(unsigned int num, int base) {
+void kern_putint(unsigned int num, int base) {
     const char *tlb = "0123456789abcdef";
     char res[50];
     res[49] = '\0';
     int i = 48;
 
     if (num == 0) {
-        putchar('0');
+        kern_putchar('0');
     }
     while (num) {
         res[i--] = tlb[num%base], num /= base;
     }
-    puts_nl(res+i+1, FALSE);
+    kern_puts_nl(res+i+1, FALSE);
 }
 
 // 简化版的printf
-int printf(uint8_t* fmt, ...) {
+int kern_printf(uint8_t* fmt, ...) {
     va_list arg;
     va_start(arg,fmt);
     while (*fmt != '\0') {
         if (*fmt != '%') {
-            putchar(*fmt);
+            kern_putchar(*fmt);
         } else {
             fmt++;
             switch (*fmt) {
             case 'c':
-                putchar(va_arg(arg, int));
+                kern_putchar(va_arg(arg, int));
                 break;
             case 's':
-                puts_nl(va_arg(arg, char*), FALSE);
+                kern_puts_nl(va_arg(arg, char*), FALSE);
                 break;
             case 'd':
-                putint(va_arg(arg, int), 10);
+                kern_putint(va_arg(arg, int), 10);
                 break;
             case 'x':
-                puts_nl("0x", FALSE);
-                putint(va_arg(arg, int), 16);
+                kern_puts_nl("0x", FALSE);
+                kern_putint(va_arg(arg, int), 16);
                 break;
-            case 'b': // 标准的printf没有这个
-                puts_nl("0b", FALSE);
-                putint(va_arg(arg, int), 2);
+            case 'b': // 标准的kern_printf没有这个
+                kern_puts_nl("0b", FALSE);
+                kern_putint(va_arg(arg, int), 2);
                 break;
             case '%':
-                putchar('%');
+                kern_putchar('%');
                 break;
             default:
                 break;

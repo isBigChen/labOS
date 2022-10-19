@@ -1,7 +1,4 @@
-#ifndef _KBD_H_
-#define _KBD_H_
-
-#define NO 0
+#include <kbd.h>
 
 const uint8_t normal_keymap[128] = {
     NO,   0x1B, '1',  '2',  '3',  '4',  '5',  '6',      // 0x00
@@ -45,4 +42,12 @@ const char * test_keymap[128] = {
     "2",     "3",    "0",         ".",   "F11",    "F12",      NO,           NO,       // 0x50
 };
 
-#endif
+uint8_t switch_alpha_case(uint8_t c) {
+    if (c >= 'a' && c <= 'z') {
+        return c - ('a' - 'A');
+    } else if (c >= 'A' && c <= 'Z') {
+        return c + ('a' - 'A');
+    } else {
+        return c;
+    }
+}

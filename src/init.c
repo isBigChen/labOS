@@ -1,8 +1,11 @@
-#include "osdefs.h"
-#include "asm.h"
-#include "int_handlers.h"
-#include "mem.h"
-#include "picirq.h"
+#include <osdefs.h>
+#include <int_handlers.h>
+#include <mem.h>
+#include <picirq.h>
+#include <task.h>
+
+#define USER_PROG_SIZE 16*512
+#define USER_PROG_SRC 0x8000 + 32*512
 
 // https://wiki.osdev.org/GDT_Tutorial
 void set_segdesc(struct segment_descriptor* sd, uint32_t base, uint32_t limit, uint16_t flag) {
@@ -16,19 +19,36 @@ void set_segdesc(struct segment_descriptor* sd, uint32_t base, uint32_t limit, u
     sd->low_part |= limit  & 0x0000FFFF;        // set limit bits 15:0
 }
 
+struct segment_descriptor* gdt = (struct segment_descriptor*)GDT_ADDR;
+struct tss_struct user_task_tss, kernel_task_tss;
+
+// task.c中定义
+extern uint8_t *user_stack;
+
+struct segment_descriptor* ldt = (struct segment_descriptor*)LDT_ADDR;
+
 void init_gdt() { // 重新设置gdt表
-    struct segment_descriptor* gdt = (struct segment_descriptor*)GDT_ADDR;
-    
-    // NULL descriptor
-    set_segdesc(gdt, 0, 0, 0);
-    // 后面只分页, 分段当做不存在?
-    set_segdesc(gdt+1, 0, 0xffffffff, GDT_CODE_PL0); // 内核代码段
-    set_segdesc(gdt+2, 0, 0xffffffff, GDT_DATA_PL0); // 内核数据段
-    set_segdesc(gdt+3, 0, 0xffffffff, GDT_CODE_PL3); // 用户代码段
-    set_segdesc(gdt+4, 0, 0xffffffff, GDT_DATA_PL3); // 用户数据段
+    set_segdesc(gdt, 0, 0, 0); // NULL descriptor
+    set_segdesc(gdt + 1, 0, 0xfffff, GDT_CODE_PL0); // 内核代码段
+    set_segdesc(gdt + 2, 0, 0xfffff, GDT_DATA_PL0); // 内核数据段
+    set_segdesc(gdt + 3, 0, 0xfffff, GDT_CODE_PL3); // 用户代码段
+    set_segdesc(gdt + 4, 0, 0xfffff, GDT_DATA_PL3); // 用户数据段
+
+    // 任务切换第三步: Saving the state of the current task. 所以得准备一个并加载到TR里, ltr之后就没用了
+    task_init(&kernel_task_tss);
+    set_segdesc(gdt + 5, &kernel_task_tss, 103, AR_TSS32); // P1 DPL00 010 B0 1
+
+    // 一个用户任务
+    user_task_init(&user_task_tss, (uint32_t) USER_LOAD_ADDR, user_stack);
+    set_segdesc(gdt + 6, &user_task_tss, 103, AR_TSS32); // P1 DPL11 010 B0 1
+
+    // 设置user_task的ldt选择符
+    set_segdesc(ldt, 0, 0xfffff, GDT_CODE_PL3); // 用户local代码段
+    set_segdesc(ldt + 1, 0, 0xfffff, GDT_DATA_PL3); // 用户local数据段
+    set_segdesc(gdt + 7, ldt, 2*sizeof(struct segment_descriptor)-1, AR_LDT);
 
     struct {uint16_t limit; uint32_t addr;} __attribute__((packed)) gdtr;
-    gdtr.limit = 5 * sizeof(struct segment_descriptor) - 1;
+    gdtr.limit = 8 * sizeof(struct segment_descriptor) - 1;
     gdtr.addr = gdt;
     
     asm volatile("lgdt %0\n\t"
@@ -49,7 +69,7 @@ void init_gdt() { // 重新设置gdt表
     先分页.
     二级页表 10 10 12 ; 4KB一页, 页表项4字节, 一页有1024项, 一个页表映射4MB.
     qemu默认内存为128MB, 为了节省探测内存大小的工作, 就不改qemu设置了.
-    所以当做物理内存有128MB, 不考虑虚拟内存管理, 最多只需要32个页表, 页目录表1个就够.
+    所以当做物理内存有128MB (0-0x7ffffff), 不考虑虚拟内存管理, 最多只需要32个页表, 页目录表1个就够.
     我们这里简单起见只用2个页表, 管理8MB内存.
     0x0~0xfff 放页目录表. 0x1000~0x1fff 放第一个页表. 0x2000~0x2fff 放第二个页表.
     第一个页表映射 0x0~0x3fffff 第二个映射 0x400000~0x7fffff
@@ -63,15 +83,15 @@ void init_pmm() {
     uint32_t* first_page_table = 0x1000;
     uint32_t* second_page_table = 0x2000;
 
-    for (uint32_t i = 0; i < 1024; i++) {
+    for (uint32_t i = 0; i < 1024; i++) {       // the first page table is for kernel
         first_page_table[i] = (i * 0x1000) | 3; // supervisor level, read/write, present.
     }
-    for (uint32_t i = 0; i < 1024; i++) {
-        second_page_table[i] = (0x400000 + i * 0x1000) | 3;
+    for (uint32_t i = 0; i < 1024; i++) {       // the second page table is for user
+        second_page_table[i] = (0x400000 + i * 0x1000) | 7;
     }
 
-    page_directory[0] = ((uint32_t)first_page_table) | 3; // // supervisor level, read/write, present.
-    page_directory[1] = ((uint32_t)second_page_table) | 3;
+    page_directory[0] = ((uint32_t)first_page_table) | 3; // supervisor level, read/write, present.
+    page_directory[1] = ((uint32_t)second_page_table) | 7;
 
     // 加载页目录表起始地址到 cr3
     
@@ -80,11 +100,13 @@ void init_pmm() {
                   "mov %%eax, %%cr3" :: "m" (page_directory));
     
     // 设置cr0开启分页
-    
+    // manual:10-04 A JMP instruction should immediately follow the setting of PG. 
     asm volatile ("xor %eax, %eax\n\t");
     asm volatile ("mov %cr0, %eax\n\t"
                   "or $0x80000000,%eax\n\t"
-                  "mov %eax,%cr0");
+                  "mov %eax,%cr0\n\t"
+                  "jmp n\n\t");
+    asm volatile ("n: mov %al, %al");
 }
 
 void init_timer() { // 抄书, 设置定时器PIT(Programmable Interval Timer)
@@ -94,8 +116,17 @@ void init_timer() { // 抄书, 设置定时器PIT(Programmable Interval Timer)
     pic_enable(IRQ(INT_TIMER));
 }
 
+uint8_t kern_buf[BUF_SIZE], kern_buf_pos = 0, kern_buf_cur = 0;
 void init_kbd() {
+    for (int i = 0; i < BUF_SIZE; i++)
+        kern_buf[i] = '\0';
     pic_enable(IRQ(INT_KEYBOARD));
+}
+
+// 将img中的用户程序代码加载到0x400000
+void load_user_program() {
+    memcpy(USER_PROG_SRC, USER_LOAD_ADDR, USER_PROG_SIZE);
+    memset(USER_PROG_SRC, 0, USER_PROG_SIZE);
 }
 
 // 设置中断门描述符　https://www.logix.cz/michal/doc/i386/chp09-05.htm#09-05

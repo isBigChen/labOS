@@ -1,45 +1,76 @@
-#include "osdefs.h"
-#include "asm.h"
-#include "screen.h"
-#include "picirq.h"
-#include "kbd.h"
+#include <osdefs.h>
+#include <screen.h>
+#include <picirq.h>
+#include <kbd.h>
+
+uint32_t kern_clock = 1; // 用于实现sys_sleep
 
 // https://gcc.gnu.org/onlinedocs/gcc-7.5.0/gcc/x86-Function-Attributes.html#x86-Function-Attributes
 __attribute__ ((interrupt))
 void interrupt_handler_0x20(struct interrupt_frame *frame) {
+    set_seg_regs();
     pic_ack();
-    static int cnt = 1, outputs = 0;
+    kern_clock++;
+    /*
+    static int cnt = 99, outputs = 0;
     cnt++;
     if (cnt == 100) {
-        printf("%d %s\n", outputs, OS_NAME);
+        kern_printf("%d %s\n", outputs, OS_NAME);
         cnt = 1;
         outputs++;
     }
+    */
+    reset_seg_regs();
 }
+
+// 键盘输入缓冲区(数组循环队列)
+extern uint8_t kern_buf[BUF_SIZE], kern_buf_pos, kern_buf_cur;
 
 __attribute__ ((interrupt))
 void interrupt_handler_0x21(struct interrupt_frame *frame) {
     pic_ack();
 
+    static bool fSHIFT = 0;
+    static bool fCAPSLOCK = 0;
+
     if ((inb(PS2_STAT) & 0x01) == 0) { // check 8042 output buffer status
         return;
     }
     uint8_t c = inb(PS2_DATA);
-    if (c != 0xE0) {
-        printf("Key [%s] is %s, code %x\n",
-            test_keymap[c & ~0x80], (c & 0x80) == 0 ? "pressed" : "released", c);
+    
+    // For test only
+    // if (c != 0xE0) {
+    //     kern_printf("[TEST] Key [%s] is %s, code %x\n",
+    //         test_keymap[c & ~0x80], (c & 0x80) == 0 ? "pressed" : "released", c);
+    // }
+
+    if (c == 0x2a || c == 0x36) { // shift pressed
+        fSHIFT = 1;
+    }
+    if (c == 0xaa || c == 0xb6) { // shift released 
+        fSHIFT = 0;
+    }
+    if (c == 0x3a) { // handle capslock
+        fCAPSLOCK = ~fCAPSLOCK;
+    }
+
+    if (!(c & 0x80)) { // pressed then print the char
+        uint8_t output = fSHIFT ? shift_keymap[c & ~0x80] : normal_keymap[c & ~0x80];
+        if (output != NO) {
+            // kern_putchar_color(fCAPSLOCK ? switch_alpha_case(output) : output, Red, Blue);
+            kern_buf[kern_buf_pos] = output;
+            kern_buf_pos = (kern_buf_pos + 1) % BUF_SIZE;
+        }
     }
 }
 
-__attribute__ ((interrupt))
-void interrupt_handler_0x80(struct interrupt_frame *frame) {
-    puts("80");
-}
+// 定义于sys_call.c
+extern __attribute__ ((interrupt)) void interrupt_handler_0x80(struct interrupt_frame *frame);
 
 __attribute__ ((interrupt))
 void interrupt_handler_default(struct interrupt_frame *frame) {
     pic_ack();
-    puts("default handler");
+    kern_puts("default handler");
 }
 
 // 许多中断放到栈上的东西有差别　暂时不管
@@ -47,91 +78,92 @@ void interrupt_handler_default(struct interrupt_frame *frame) {
 // 有push error code的要加上一个error_code参数, 不然iret应该会出错
 __attribute__ ((interrupt))
 void divide_zero_fault_handler0(struct interrupt_frame *frame) {
-    puts("0 Divide Zero");
+    kern_puts("0 Divide Zero");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void debug_exception_handler1(struct interrupt_frame *frame) {
-    puts("1 Debug Exception");
+    kern_puts("1 Debug Exception");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void breakpoint_trap_handler3(struct interrupt_frame *frame) {
-    puts("3 Breakpoint");
+    kern_puts("3 Breakpoint");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void overflow_trap_handler4(struct interrupt_frame *frame) {
-    puts("4 Overflow");
+    kern_puts("4 Overflow");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void bounds_check_fault_handler5(struct interrupt_frame *frame) {
-    puts("5 Bounds Check");
+    kern_puts("5 Bounds Check");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void invalid_opcode_fault_handler6(struct interrupt_frame *frame) {
-    puts("6 Invalid Opcode");
+    kern_puts("6 Invalid Opcode");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void coprocessor_exception_handler7(struct interrupt_frame *frame) {
-    puts("7 Coprocessor Not Available");
+    kern_puts("7 Coprocessor Not Available");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void double_fault_handler8(struct interrupt_frame *frame, uint32_t error_code) {
-    puts("8 Double Fault");
+    kern_puts("8 Double Fault");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void CSO_exception_handler9(struct interrupt_frame *frame) {
-    puts("9 Coprocessor Segment Overrun");
+    kern_puts("9 Coprocessor Segment Overrun");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void invalid_tss_fault_handler10(struct interrupt_frame *frame, uint32_t error_code) {
-    puts("10 Invalid TSS");
+    kern_puts("10 Invalid TSS");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void SNP_exception_handler11(struct interrupt_frame *frame, uint32_t error_code) {
-    puts("11 Segment Not Present");
+    kern_puts("11 Segment Not Present");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void stack_exception_handler12(struct interrupt_frame *frame, uint32_t error_code) {
-    puts("12 Stack Exception");
+    kern_puts("12 Stack Exception");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void general_protection_exception_handler13(struct interrupt_frame *frame, uint32_t error_code) {
-    printf("%x %x %x\n", frame->tf_eip, frame->tf_cs, error_code);
-    puts("13 General Protection Exception");
+    kern_printf("%x %x %x\n", frame->tf_eip, frame->tf_cs, error_code);
+    kern_puts("13 General Protection Exception");
     while (1);
 }
 
 __attribute__ ((interrupt))
 void page_fault_handler14(struct interrupt_frame *frame, uint32_t error_code) {
-    puts("14 Page Fault");
+    kern_puts("14 Page Fault");
+    kern_printf("Error code: %x\n", error_code);
     while (1);
 }
 
 __attribute__ ((interrupt))
 void coprocessor_exception_handler16(struct interrupt_frame *frame) {
-    puts("16 Coprocessor Error");
+    kern_puts("16 Coprocessor Error");
     while (1);
 }

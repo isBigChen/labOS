@@ -71,7 +71,7 @@ protect:
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    mov ebp, 0x0
-    mov esp, 0x7c00 
+    mov ebp, 0x0        ; ebp is unuseable now
+    mov esp, 0x7c00     ; stack point esp:0x7c00
 
 jmp c_main

@@ -1,14 +1,53 @@
 #ifndef _OSDEFS_H_
 #define _OSDEFS_H_
 
-#define OS_NAME "labOS"
-
-// 强制内联
-#define __always_inline inline __attribute__((always_inline))
+#define OS_NAME "testos"
 
 typedef unsigned char uint8_t;
 typedef unsigned short int uint16_t;
 typedef unsigned int uint32_t;
+typedef unsigned char bool;
+
+// 强制内联
+#define __always_inline inline __attribute__((always_inline))
+static inline void _hlt() {
+    asm volatile ("hlt");
+}
+
+static inline void _sti() {
+    asm volatile ("sti");
+}
+
+static inline void outb(uint16_t port, uint8_t val) {
+    asm volatile ( "outb %0, %1" : : "a"(val), "Nd"(port) );
+}
+
+static inline uint8_t inb(uint16_t port) {
+    uint8_t ret;
+    asm volatile ( "inb %1, %0"
+                   : "=a"(ret)
+                   : "Nd"(port) );
+    return ret;
+}
+
+static inline void set_seg_regs() {
+    asm volatile ("push %ds\n\t" // 中断只会自动改ss到0x10. 数据段要自己改一下.
+                  "push %es\n\t"
+                  "push %fs\n\t"
+                  "push %gs\n\t"
+                  //"pushal\n\t"
+                  "mov $0x10, %edx\n\t"
+                  "mov %dx, %ds\n\t"
+                  "mov %dx, %es");
+}
+
+static inline void reset_seg_regs() {
+    asm volatile (//"popal\n\t"
+                  "pop %gs\n\t"
+                  "pop %fs\n\t"
+                  "pop %es\n\t"
+                  "pop %ds");
+}
 
 enum Color {Black, Blue, Green, Cyan, Red, \
             Purple, Brown, Gray, Dark_Gray, \
@@ -73,6 +112,7 @@ struct segment_descriptor {
 
 // 随便设的　暂时不考虑空间浪费的问题
 #define GDT_ADDR 0x3000
+#define LDT_ADDR 0x5000
 
 #define PIC0_ICW1 0x20
 #define PIC0_OCW2 0x20
@@ -111,7 +151,7 @@ struct idt_entry_t {
 #define PS2_CMD  0x64
 #define PS2_STAT 0x64
 
-//目前只用了没有涉及特权转换的中断栈层次 
+// 目前只用了没有涉及特权转换的中断栈层次 
 // https://www.logix.cz/michal/doc/i386/chp09-06.htm#09-06-01-01
 struct interrupt_frame {
     uint32_t tf_eip;
@@ -119,5 +159,62 @@ struct interrupt_frame {
     uint16_t tf_padding4;
     uint32_t tf_eflags;
 };
+
+/*
+任务相关
+
+https://wiki.osdev.org/Task_State_Segment
+For each CPU which executes processes possibly wanting to do system calls via interrupts, 
+one TSS is required. The only interesting fields are SS0 and ESP0. 
+Whenever a system call occurs, the CPU gets the SS0 and ESP0-value in its TSS and assigns the stack-pointer to it. 
+So one or more kernel-stacks need to be set up for processes doing system calls.
+*/ 
+
+struct tss_struct { // 104字节
+/* SS0, SS1, SS2: The Segment Selectors used to load the stack 
+                  when a privilege level change occurs from a lower privilege level to a higher one.
+ESP0, ESP1, ESP2: The Stack Pointers used to load the stack 
+                  when a privilege level change occurs from a lower privilege level to a higher one. */
+    uint16_t   link, link_reserved;
+    uint32_t   esp0;
+    uint16_t   ss0, ss0_reserved;
+    uint32_t   esp1;
+    uint16_t   ss1, ss1_reserved;
+    uint32_t   esp2;
+    uint16_t   ss2, ss2_reserved;
+
+    uint32_t   cr3;
+    uint32_t   eip;
+    uint32_t   eflags;
+    uint32_t   eax;
+    uint32_t   ecx;
+    uint32_t   edx;
+    uint32_t   ebx;
+    uint32_t   esp;
+    uint32_t   ebp;
+    uint32_t   esi;
+    uint32_t   edi;
+
+    uint16_t   es, es_reserved;
+    uint16_t   cs, cs_reserved;
+    uint16_t   ss, ss_reserved;
+    uint16_t   ds, ds_reserved;
+    uint16_t   fs, fs_reserved;
+    uint16_t   gs, gs_reserved;
+    uint16_t   ldt, ldt_reserved;
+
+    uint16_t   trap;
+    uint16_t   iomap;
+};
+
+#define AR_TSS32 0x0089 //  P1 DPL00 010 B0 1
+#define AR_LDT 0x0082
+
+
+// 系统调用表
+// eax 放功能编号. ebx, ecx, edi, esi, 栈放参数. edx保留
+enum sys_call_tlb {sys_clsscr, sys_putchar, sys_puts_nl, sys_putint, sys_moveto, sys_clock, sys_getch};
+
+#define BUF_SIZE 100
 
 #endif

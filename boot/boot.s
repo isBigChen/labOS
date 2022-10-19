@@ -38,7 +38,7 @@ next:
     mov dh, 0   ; Heads
     mov cl, 2   ; Sector start number
     mov ah, 2   ; read function 
-    mov al, 40  ; read 40 sectors
+    mov al, 48  ; read 48 sectors
     mov dl, 80h ; 
     int 13h
 

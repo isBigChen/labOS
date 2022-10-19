@@ -1,15 +1,16 @@
-/* Simple linker script for the testos kernel.
+
+/* Simple linker script for the testos user programs.
    See the GNU ld 'info' manual ("info ld") to learn the syntax. */
 
 OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
 OUTPUT_ARCH(i386)
-ENTRY(main)
+ENTRY(TestosMain)
 
 SECTIONS {
-    . = 0x8200;
+    . = 0x400000;
 
     .text : {
-        *(.text.main);
+        *(.text.TestosMain);
         *(.text*);
     }
 	

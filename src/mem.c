@@ -1,4 +1,4 @@
-#include "osdefs.h"
+#include <osdefs.h>
 
 void memset(uint8_t* addr, uint8_t val, int offset) {
     for (int i = 0; i < offset; i++) {
@@ -8,6 +8,6 @@ void memset(uint8_t* addr, uint8_t val, int offset) {
 
 void memcpy(uint8_t* src, uint8_t* dst, int size) {
     for (int i = 0; i < size; i++) {
-        src[i] = dst[i];
+        dst[i] = src[i];
     }
 }
