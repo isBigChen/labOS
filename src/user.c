@@ -1,6 +1,39 @@
 #include <osdefs.h>
 #include <user_lib.h>
 
+char inputbuf[256] = {0};
+
+void clear_inputbuf() {
+    for (int i = 0; i < 256; i++) {
+        inputbuf[i] = 0;
+    }
+}
+
+void task1() {
+    int i = 0;
+    while (1) {
+        printf("Task 1: %d\n", i++);
+        sleep(100);
+    }
+}
+
+void task2() {
+    int i = 0;
+    while (1) {
+        printf("Task 2: %d\n", i++);
+        sleep(100);
+    }
+}
+
+void task3() {
+    int i = 0;
+    while (1) {
+        printf("Task 3: %d\n", i++);
+        sleep(100);
+    }
+}
+
+
 /* ---------- */
 
 // <<K&R C>> 2.7节 的伪随机数函数.
@@ -15,24 +48,61 @@ void srand(uint32_t seed) {
     next = seed;
 }
 
+void myfunc(){
+    puts("Please input something");
+    gets(inputbuf); 
+    puts(inputbuf);
+}
+
+void banner() { 
+    printf("Welcome to ");
+    puts_color("labOS :)", Cyan, Black);
+    puts("");  
+    puts("Type \"help\" for more infomation.");
+}
+
+int run_flag = 0;
+
 void TestosMain() {
-    const char *s = "Hello. I am a user program in Ring3.\n";
-    moveto(10, 20);
-    while (*s) {
-        putchar(*s++);
-        sleep(100);
-    }
-    moveto(0, 0);
-    printf("%d %c %% %x %b\n", 1, 'x', 0x233, 8);
-    uint8_t c;
-    srand(_sys_clock());
-    puts("Now let's generate some random integers.Press Q to exit.");
+    if (!run_flag)
+        banner();
+    run_flag = 1;
+    add_task(task1);
+    add_task(task2);
+    add_task(task3);
+shell:
     while (1) {
-        c = getch();
-        if (c == 'q') break;
-        printf("%d\n", rand());
-        sleep(1000);
+        puts_color("shell> ", Light_Blue, Black);
+        gets(inputbuf);
+        if (strcmp(inputbuf, "func") == 0) {
+            goto func;
+        } else if (strcmp(inputbuf, "switch") == 0) {
+            goto switch_test;
+        } else if (strcmp(inputbuf, "help") == 0) {
+            puts("Help list for labOS:");
+            puts("  help - Display this message.");
+            puts("  cls - Clear the screen.");
+            puts("  banner - Display a beautiful banner.");
+            puts("  func - Call myfunc.");
+            puts("  switch - Show task switch test in 5 second.");
+        } else if (strcmp(inputbuf, "banner") == 0) {
+            banner();
+        } else if (strcmp(inputbuf, "cls") == 0) {
+            clsscr();
+            moveto(0, 0);
+        }
+        else {
+            printf("! Unknown command: %s\nType \"help\" for more infomation.\n", inputbuf);
+        }
+        clear_inputbuf();
     }
-    puts("Exited");
-    while (1) {}
+func:
+    myfunc();
+    clear_inputbuf();
+    goto shell;
+switch_test:
+    // 交互运行task1, task2, task3大概5秒后返回到TestosMain开始
+    // 具体见int_handlers.c时钟中断处理
+    switch_enable(TRUE);
+    goto shell;
 }

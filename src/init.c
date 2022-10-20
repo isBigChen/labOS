@@ -20,12 +20,10 @@ void set_segdesc(struct segment_descriptor* sd, uint32_t base, uint32_t limit, u
 }
 
 struct segment_descriptor* gdt = (struct segment_descriptor*)GDT_ADDR;
-struct tss_struct user_task_tss, kernel_task_tss;
+struct tss_struct user_task_tss, tmp_task_tss;
 
 // task.c中定义
 extern uint8_t *user_stack;
-
-struct segment_descriptor* ldt = (struct segment_descriptor*)LDT_ADDR;
 
 void init_gdt() { // 重新设置gdt表
     set_segdesc(gdt, 0, 0, 0); // NULL descriptor
@@ -35,24 +33,21 @@ void init_gdt() { // 重新设置gdt表
     set_segdesc(gdt + 4, 0, 0xfffff, GDT_DATA_PL3); // 用户数据段
 
     // 任务切换第三步: Saving the state of the current task. 所以得准备一个并加载到TR里, ltr之后就没用了
-    task_init(&kernel_task_tss);
-    set_segdesc(gdt + 5, &kernel_task_tss, 103, AR_TSS32); // P1 DPL00 010 B0 1
+    tmp_task_init(&tmp_task_tss);
+    set_segdesc(gdt + 5, &tmp_task_tss, 103, AR_TSS32); // P1 DPL00 010 B0 1
 
-    // 一个用户任务
+    // 用户任务 TestosMain
     user_task_init(&user_task_tss, (uint32_t) USER_LOAD_ADDR, user_stack);
-    set_segdesc(gdt + 6, &user_task_tss, 103, AR_TSS32); // P1 DPL11 010 B0 1
+    set_segdesc(gdt + 6, &user_task_tss, 103, AR_TSS32); // P1 DPL00 010 B0 1
 
-    // 设置user_task的ldt选择符
-    set_segdesc(ldt, 0, 0xfffff, GDT_CODE_PL3); // 用户local代码段
-    set_segdesc(ldt + 1, 0, 0xfffff, GDT_DATA_PL3); // 用户local数据段
-    set_segdesc(gdt + 7, ldt, 2*sizeof(struct segment_descriptor)-1, AR_LDT);
-
+    // 加载新的gdtr
     struct {uint16_t limit; uint32_t addr;} __attribute__((packed)) gdtr;
     gdtr.limit = 8 * sizeof(struct segment_descriptor) - 1;
     gdtr.addr = gdt;
-    
+
     asm volatile("lgdt %0\n\t"
                  "jmp $0x08,$x\n\t" :: "m" (gdtr));
+
     // 重新加载后要刷新段寄存器
     asm volatile("x: mov $0x10, %ax\n\t"
                  "mov %ax, %ds\n\t"
@@ -124,9 +119,11 @@ void init_kbd() {
 }
 
 // 将img中的用户程序代码加载到0x400000
+// 添加了第一个task
 void load_user_program() {
-    memcpy(USER_PROG_SRC, USER_LOAD_ADDR, USER_PROG_SIZE);
-    memset(USER_PROG_SRC, 0, USER_PROG_SIZE);
+    read_sectors(USER_LOAD_ADDR, 32, 16);
+    add_task(USER_LOAD_ADDR);
+    user_task_tss.eip = USER_LOAD_ADDR;
 }
 
 // 设置中断门描述符　https://www.logix.cz/michal/doc/i386/chp09-05.htm#09-05
@@ -171,9 +168,10 @@ void init_idt() { //初始化中断表
     set_intrdesc(idt+0x20, interrupt_handler_0x20, KERNEL_CS, AR_INTGATE32);
     // 键盘中断
     set_intrdesc(idt+0x21, interrupt_handler_0x21, KERNEL_CS, AR_INTGATE32);
-    // 暂定为系统调用中断号
+    // 系统调用中断号
     set_intrdesc(idt+0x80, interrupt_handler_0x80, KERNEL_CS, AR_INTGATE32+0x60);
     
+    // 加载IDT表
     struct {uint16_t limit; uint32_t addr;} __attribute__((packed)) idtr;
     idtr.limit = 255 * sizeof(struct idt_entry_t) - 1; // 有效字节数-1
     idtr.addr = idt;

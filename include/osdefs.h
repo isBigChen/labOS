@@ -30,6 +30,15 @@ static inline uint8_t inb(uint16_t port) {
     return ret;
 }
 
+static inline void insl(uint32_t port, void *addr, int cnt) {
+    asm volatile (
+        "cld;"
+        "repne; insl;"
+        : "=D" (addr), "=c" (cnt)
+        : "d" (port), "0" (addr), "1" (cnt)
+        : "memory", "cc");
+}
+
 static inline void set_seg_regs() {
     asm volatile ("push %ds\n\t" // 中断只会自动改ss到0x10. 数据段要自己改一下.
                   "push %es\n\t"
@@ -112,7 +121,6 @@ struct segment_descriptor {
 
 // 随便设的　暂时不考虑空间浪费的问题
 #define GDT_ADDR 0x3000
-#define LDT_ADDR 0x5000
 
 #define PIC0_ICW1 0x20
 #define PIC0_OCW2 0x20
@@ -151,13 +159,22 @@ struct idt_entry_t {
 #define PS2_CMD  0x64
 #define PS2_STAT 0x64
 
-// 目前只用了没有涉及特权转换的中断栈层次 
 // https://www.logix.cz/michal/doc/i386/chp09-06.htm#09-06-01-01
 struct interrupt_frame {
     uint32_t tf_eip;
     uint16_t tf_cs;
     uint16_t tf_padding4;
     uint32_t tf_eflags;
+};
+
+// 有特权级转换的中断frame
+struct interrupt_frame_wpt {
+    uint32_t tf_eip;
+    uint16_t tf_cs;
+    uint16_t tf_padding4;
+    uint32_t tf_eflags;
+    uint32_t tf_esp; // 从TSS得到的ss:esp
+    uint16_t tf_ss;
 };
 
 /*
@@ -208,12 +225,22 @@ ESP0, ESP1, ESP2: The Stack Pointers used to load the stack
 };
 
 #define AR_TSS32 0x0089 //  P1 DPL00 010 B0 1
-#define AR_LDT 0x0082
-
 
 // 系统调用表
 // eax 放功能编号. ebx, ecx, edi, esi, 栈放参数. edx保留
-enum sys_call_tlb {sys_clsscr, sys_putchar, sys_puts_nl, sys_putint, sys_moveto, sys_clock, sys_getch};
+enum sys_call_tlb {
+    sys_clsscr,
+    sys_putchar,
+    sys_putchar_color,
+    sys_puts_nl,
+    sys_putint,
+    sys_moveto,
+    sys_clock,
+    sys_getch,
+    sys_write_screen,
+    sys_add_task,
+    sys_switch_enable,
+};
 
 #define BUF_SIZE 100
 

@@ -2,24 +2,58 @@
 #include <screen.h>
 #include <picirq.h>
 #include <kbd.h>
+#include <mem.h>
+#include <task.h>
 
-uint32_t kern_clock = 1; // 用于实现sys_sleep
+uint32_t kern_clock = 1; // 触发时钟中断的次数
+uint32_t old_clock = 1;
+
+int tasks_ptr = 1, time_limit = 500;
+bool switched = 0, switch_enable = 0;
 
 // https://gcc.gnu.org/onlinedocs/gcc-7.5.0/gcc/x86-Function-Attributes.html#x86-Function-Attributes
+// 时钟中断
 __attribute__ ((interrupt))
-void interrupt_handler_0x20(struct interrupt_frame *frame) {
+void interrupt_handler_0x20(struct interrupt_frame_wpt *frame) {
+    // 直接修改中断栈帧实现多任务切换
+    // 进入TestosMain后 user_tasks = {TestosMain, task1, task2, task3}
+    if (tasks_count > 1 && switch_enable) {
+        if (!switched) {
+            // switch_enable后首先跳转到task1
+            frame->tf_eip = user_tasks[tasks_ptr].eip;
+            frame->tf_esp = user_tasks[tasks_ptr].esp;
+            old_clock = kern_clock;
+            switched = 1;
+        } else {
+            time_limit--;
+            if (old_clock + 10 == kern_clock) {
+                // 每10个时钟切换一次任务
+                old_clock = kern_clock;
+
+                // 先记录下刚才跑到哪了
+                user_tasks[tasks_ptr].eip = frame->tf_eip;
+                user_tasks[tasks_ptr].esp = frame->tf_esp;
+
+                // 保证只在 task1, task2, task3 之间切换
+                tasks_ptr = tasks_ptr % (tasks_count - 1) + 1;
+                frame->tf_eip = user_tasks[tasks_ptr].eip;
+                frame->tf_esp = user_tasks[tasks_ptr].esp;
+            } 
+            if (time_limit == 0) {
+                // 5 秒后复位到user_tasks[0]即TestosMain并修改标志
+                tasks_ptr = 1;
+                time_limit = 500;
+                tasks_count = 1;
+                frame->tf_eip = user_tasks[0].eip;
+                frame->tf_esp = user_tasks[0].esp;
+                switched = 0;
+                switch_enable = FALSE;
+            }
+        }
+    }
     set_seg_regs();
     pic_ack();
     kern_clock++;
-    /*
-    static int cnt = 99, outputs = 0;
-    cnt++;
-    if (cnt == 100) {
-        kern_printf("%d %s\n", outputs, OS_NAME);
-        cnt = 1;
-        outputs++;
-    }
-    */
     reset_seg_regs();
 }
 
@@ -73,7 +107,7 @@ void interrupt_handler_default(struct interrupt_frame *frame) {
     kern_puts("default handler");
 }
 
-// 许多中断放到栈上的东西有差别　暂时不管
+// 许多异常放到栈上的东西有差别　暂时不管
 // 参考https://www.logix.cz/michal/doc/i386/chp09-08.htm#09-08
 // 有push error code的要加上一个error_code参数, 不然iret应该会出错
 __attribute__ ((interrupt))
@@ -148,6 +182,7 @@ void stack_exception_handler12(struct interrupt_frame *frame, uint32_t error_cod
     while (1);
 }
 
+// 目前最常见的是这位 ORZ
 __attribute__ ((interrupt))
 void general_protection_exception_handler13(struct interrupt_frame *frame, uint32_t error_code) {
     kern_printf("%x %x %x\n", frame->tf_eip, frame->tf_cs, error_code);

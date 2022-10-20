@@ -1,4 +1,3 @@
-
 /* Simple linker script for the testos user programs.
    See the GNU ld 'info' manual ("info ld") to learn the syntax. */
 

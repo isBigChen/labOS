@@ -2,20 +2,18 @@
 #include <init.h>
 
 static inline void move_to_user_task() {
-    // 只能从任务切换到任务, 所以先加载一个临时tss (gdt[5])
-    // 0x30 为 user_task_tss (gdt[6])
+    // 只能从任务切换到任务, 所以先加载一个临时tss (gdt[5]. 索引为5*8|0)
+    // 0x30 为 user_task_tss (gdt[6]) 即 TestosMain
     asm volatile("ltr %%ax\n\t"
                  "jmp $0x30, $0" :: "a" (5*8));
 }
 
 void kern_main() {
     /*
-     TODO 暂定
-     简单的内存和任务管理 内存管理器 进程调度
-     复杂的用户程序
+     TODO 暂时没了
     */
-    kern_init_scr();      // 初始化显示
-    init_gdt();           // 重新设置GDT; 尝试添加一个用户任务
+    init_scr();           // 初始化显示
+    init_gdt();           // 重新设置GDT; 添加第一个用户程序
     init_pmm();           // 初始化物理内存管理, 目前只有分页
     init_idt();           // 初始化及设置IDT
     init_pic();           // 初始化PIC

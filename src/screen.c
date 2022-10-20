@@ -6,7 +6,7 @@
 #define VGA_HEIGHT 25
 
 //显存起始地址
-static uint8_t* screen_buf = (uint8_t*)0xb8000;
+uint8_t* screen_buf = (uint8_t*)0xb8000;
 
 // 当前光标位置 x行y列
 static int cur_x, cur_y;
@@ -53,7 +53,7 @@ uint16_t get_cursor_position(void)
 /* 接下来应该会有非常多的bug */
 
 // 初始化光标位置和显存
-void kern_init_scr() {
+void init_scr() {
     cur_x = 0, cur_y = 0;
     kern_clsscr();
     // 参数意为让光标的显示范围为第x像素行到第y像素行，一行有16个像素，此为仅显示最后一行的像素点
@@ -63,7 +63,7 @@ void kern_init_scr() {
 // 清空显存
 void kern_clsscr() {
     for (int i = 0; i < VGA_HEIGHT * VGA_WIDTH; i += 2) {
-        //screen_buf[i] = '\0';
+        screen_buf[i] = '\0';
         screen_buf[i+1] = Gray;
     }
 }
@@ -104,9 +104,15 @@ void kern_putchar_color(uint8_t c, enum Color fcolor, enum Color bcolor) {
     }
 
     int pos = cur_y+cur_x*VGA_WIDTH;
-    screen_buf[pos] = c;
-    screen_buf[pos+1] = bcolor<<4|fcolor;
-    kern_moveto(cur_x, cur_y+2);
+    if (c != '\b') {
+        screen_buf[pos] = c;
+        screen_buf[pos+1] = bcolor<<4|fcolor;
+        kern_moveto(cur_x, cur_y+2);
+    } else { // 退格, 会把前面的内容清掉. 小心把shell>删了.
+        screen_buf[pos-1] = '\0';
+        screen_buf[pos-2] = Black;
+        kern_moveto(cur_x, cur_y-2);
+    }
 }
 
 void kern_putchar(uint8_t c) {
@@ -116,7 +122,7 @@ void kern_putchar(uint8_t c) {
 // flag 控制是否换行
 void kern_puts_nl(uint8_t* s, int flag) {
     for (; *s; s++) {
-        kern_putchar(*s);
+        kern_putchar(*s); // 光标会一个个移动, 应该重写
     }
     if (flag) {
         kern_moveto(cur_x+1, 0);
@@ -150,7 +156,7 @@ void kern_putint(unsigned int num, int base) {
     kern_puts_nl(res+i+1, FALSE);
 }
 
-// 简化版的printf
+// 简化版的内核级printf
 int kern_printf(uint8_t* fmt, ...) {
     va_list arg;
     va_start(arg,fmt);
@@ -173,7 +179,7 @@ int kern_printf(uint8_t* fmt, ...) {
                 kern_puts_nl("0x", FALSE);
                 kern_putint(va_arg(arg, int), 16);
                 break;
-            case 'b': // 标准的kern_printf没有这个
+            case 'b': // 标准的printf没有这个
                 kern_puts_nl("0b", FALSE);
                 kern_putint(va_arg(arg, int), 2);
                 break;

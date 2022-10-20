@@ -8,7 +8,7 @@ void disable_cursor();
 void update_cursor(int x, int y);
 uint16_t get_cursor_position(void);
 
-void kern_init_scr();
+void init_scr();
 void kern_clsscr();
 void kern_moveto(int x, int y);
 void kern_putchar_color(uint8_t c, enum Color fcolor, enum Color bcolor);

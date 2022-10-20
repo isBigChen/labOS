@@ -1,0 +1,17 @@
+define kq
+shell kill `ps -ef | grep qemu | xargs -n1 | grep "[0-9]" | head -n1`
+end
+
+file bin/kernel.bin.elf
+target remote :1234
+# set architecture i8086
+set architecture i386
+set disassembly-flavor intel
+# b *0x7c00 引导程序
+# b *0x8000 进入保护模式
+# b kern_main
+# b move_to_user_task
+# b page_fault_handler14
+# file bin/user.bin.elf
+b *0x8e83
+c
